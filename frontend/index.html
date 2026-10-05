@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Decentralized Voting</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.4/dist/ethers.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0b0d17;
+      --card: rgba(255, 255, 255, 0.04);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --text: #eef0ff;
+      --muted: #8b90b0;
+      --accent: #7c5cff;
+      --accent-2: #22d3ee;
+      --success: #34d399;
+      --error: #f87171;
+      --bar-bg: rgba(255, 255, 255, 0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: "Inter", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      background-image:
+        radial-gradient(circle at 15% 10%, rgba(124, 92, 255, 0.25), transparent 40%),
+        radial-gradient(circle at 85% 90%, rgba(34, 211, 238, 0.15), transparent 40%);
+      background-attachment: fixed;
+    }
+
+    .container { max-width: 640px; margin: 0 auto; padding: 24px 16px 64px; }
+
+    /* Header */
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 12px; margin-bottom: 48px;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; }
+    .logo-mark {
+      width: 34px; height: 34px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      display: grid; place-items: center; font-size: 18px;
+    }
+
+    .btn {
+      font: inherit; font-weight: 600; font-size: 14px;
+      border: none; border-radius: 12px; padding: 10px 18px;
+      cursor: pointer; transition: transform 0.15s, opacity 0.15s, background 0.15s;
+      color: white;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:disabled { cursor: not-allowed; opacity: 0.5; }
+    .btn-primary { background: linear-gradient(135deg, var(--accent), #9b7bff); box-shadow: 0 6px 20px rgba(124, 92, 255, 0.35); }
+    .btn-ghost { background: var(--card); border: 1px solid var(--card-border); }
+
+    .wallet-pill {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--card); border: 1px solid var(--card-border);
+      padding: 8px 14px; border-radius: 999px; font-size: 14px; font-weight: 500;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+
+    /* Hero */
+    .hero { text-align: center; margin-bottom: 36px; }
+    .hero h1 {
+      font-size: clamp(30px, 6vw, 42px); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px;
+      background: linear-gradient(135deg, #fff, #b9a9ff);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hero p { color: var(--muted); font-size: 16px; line-height: 1.5; }
+
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+    .stat {
+      background: var(--card); border: 1px solid var(--card-border);
+      border-radius: 16px; padding: 16px; text-align: center;
+    }
+    .stat-value { font-size: 22px; font-weight: 700; }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+    /* Candidates */
+    .candidates { display: flex; flex-direction: column; gap: 12px; }
+    .candidate {
+      background: var(--card); border: 1px solid var(--card-border);
+      border-radius: 18px; padding: 18px 20px;
+      transition: border-color 0.2s, background 0.2s;
+      animation: fadeIn 0.35s ease both;
+    }
+    .candidate:hover { border-color: rgba(124, 92, 255, 0.4); }
+    .candidate.leader { border-color: rgba(124, 92, 255, 0.6); background: rgba(124, 92, 255, 0.08); }
+
+    .candidate-top { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .avatar {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      display: grid; place-items: center; font-weight: 700; font-size: 18px; color: white;
+    }
+    .candidate-info { flex: 1; min-width: 0; }
+    .candidate-name { font-weight: 600; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+    .badge {
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+      background: rgba(124, 92, 255, 0.2); color: #c4b5fd;
+    }
+    .candidate-votes { color: var(--muted); font-size: 14px; margin-top: 2px; }
+
+    .bar { height: 8px; background: var(--bar-bg); border-radius: 999px; overflow: hidden; }
+    .bar-fill {
+      height: 100%; border-radius: 999px; width: 0;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2));
+      transition: width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .voted-btn { background: rgba(52, 211, 153, 0.12); color: var(--success); opacity: 1 !important; }
+
+    /* Empty / connect state */
+    .empty {
+      text-align: center; padding: 48px 24px;
+      background: var(--card); border: 1px dashed var(--card-border); border-radius: 20px;
+    }
+    .empty-icon { font-size: 40px; margin-bottom: 12px; }
+    .empty h2 { font-size: 20px; margin-bottom: 8px; }
+    .empty p { color: var(--muted); margin-bottom: 20px; }
+
+    /* Toast */
+    #toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translate(-50%, 120px);
+      max-width: calc(100% - 32px); width: max-content;
+      padding: 12px 18px; border-radius: 12px; font-size: 14px; font-weight: 500;
+      background: #1a1d2e; border: 1px solid var(--card-border);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+      transition: transform 0.3s ease; display: flex; align-items: center; gap: 10px;
+    }
+    #toast.show { transform: translate(-50%, 0); }
+    #toast.error { border-color: rgba(248, 113, 113, 0.5); color: var(--error); }
+    #toast.success { border-color: rgba(52, 211, 153, 0.5); color: var(--success); }
+
+    .spinner {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, 0.3); border-top-color: white;
+      animation: spin 0.7s linear infinite; display: inline-block; vertical-align: -2px;
+    }
+
+    footer { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40px; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+    @media (max-width: 480px) {
+      .stats { gap: 8px; }
+      .stat { padding: 12px 8px; }
+      .stat-value { font-size: 18px; }
+      .candidate { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo"><div class="logo-mark">🗳️</div> ChainVote</div>
+      <div id="walletArea">
+        <button id="connectBtn" class="btn btn-primary">Connect Wallet</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <h1>Decentralized Voting</h1>
+      <p>Every vote is recorded on the blockchain.<br />One wallet, one vote — transparent and tamper-proof.</p>
+    </section>
+
+    <section class="stats" id="stats" hidden>
+      <div class="stat"><div class="stat-value" id="totalVotes">0</div><div class="stat-label">Total votes</div></div>
+      <div class="stat"><div class="stat-value" id="candidateCount">0</div><div class="stat-label">Candidates</div></div>
+      <div class="stat"><div class="stat-value" id="yourStatus">—</div><div class="stat-label">Your status</div></div>
+    </section>
+
+    <section id="candidates">
+      <div class="empty">
+        <div class="empty-icon">🦊</div>
+        <h2>Connect your wallet</h2>
+        <p>Connect MetaMask to see the candidates and cast your vote.</p>
+        <button class="btn btn-primary" onclick="connectWallet()">Connect Wallet</button>
+      </div>
+    </section>
+
+    <footer>Running on Hardhat Local · Chain ID 31337</footer>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    // Default = first deploy on a fresh `npx hardhat node`. Replace with your address from deploy output.
+    const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+    const ABI = [
+      "function getCandidates() view returns (string[])",
+      "function getVotes(string) view returns (uint256)",
+      "function hasVoted(address) view returns (bool)",
+      "function vote(string)"
+    ];
+    const AVATAR_COLORS = [
+      "linear-gradient(135deg,#7c5cff,#a78bfa)",
+      "linear-gradient(135deg,#06b6d4,#22d3ee)",
+      "linear-gradient(135deg,#f43f5e,#fb7185)",
+      "linear-gradient(135deg,#f59e0b,#fbbf24)",
+      "linear-gradient(135deg,#10b981,#34d399)"
+    ];
+
+    let provider, signer, contract;
+    let toastTimer;
+
+    document.getElementById("connectBtn").addEventListener("click", connectWallet);
+    if (window.ethereum) {
+      window.ethereum.on("chainChanged", () => location.reload());
+      window.ethereum.on("accountsChanged", () => location.reload());
+    }
+
+    function showToast(message, type = "info", persist = false) {
+      const toast = document.getElementById("toast");
+      toast.className = "show " + type;
+      toast.innerHTML = "";
+      if (type === "info") {
+        const s = document.createElement("span");
+        s.className = "spinner";
+        toast.appendChild(s);
+      }
+      toast.append(message);
+      clearTimeout(toastTimer);
+      if (!persist) toastTimer = setTimeout(() => toast.classList.remove("show"), 4000);
+    }
+
+    function shortAddress(addr) {
+      return addr.slice(0, 6) + "…" + addr.slice(-4);
+    }
+
+    async function connectWallet() {
+      try {
+        if (!window.ethereum) { showToast("Install MetaMask first.", "error"); return; }
+        if (!ethers.isAddress(CONTRACT_ADDRESS)) {
+          showToast("Set CONTRACT_ADDRESS in index.html to your deployed contract address.", "error");
+          return;
+        }
+        await window.ethereum.request({ method: "eth_requestAccounts" });
+        await switchToHardhat();
+        provider = new ethers.BrowserProvider(window.ethereum);
+        signer = await provider.getSigner();
+
+        const code = await provider.getCode(CONTRACT_ADDRESS);
+        if (code === "0x") {
+          showToast("No contract found. Is the Hardhat node running and the contract deployed?", "error");
+          return;
+        }
+
+        contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+        const address = await signer.getAddress();
+        document.getElementById("walletArea").innerHTML =
+          `<div class="wallet-pill"><span class="dot"></span>${shortAddress(address)}</div>`;
+        await loadCandidates();
+      } catch (e) {
+        showToast(e.shortMessage || e.message, "error");
+      }
+    }
+
+    // Ask MetaMask to use the local Hardhat network (chain ID 31337 = 0x7a69)
+    async function switchToHardhat() {
+      const chainId = "0x7a69";
+      try {
+        await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId }] });
+      } catch (e) {
+        if (e.code !== 4902) throw e; // 4902 = network not added yet
+        await window.ethereum.request({
+          method: "wallet_addEthereumChain",
+          params: [{
+            chainId,
+            chainName: "Hardhat Local",
+            rpcUrls: ["http://127.0.0.1:8545"],
+            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }
+          }]
+        });
+      }
+    }
+
+    async function loadCandidates() {
+      const address = await signer.getAddress();
+      const voted = await contract.hasVoted(address);
+      const names = await contract.getCandidates();
+      const counts = (await Promise.all(names.map((n) => contract.getVotes(n)))).map(Number);
+      const total = counts.reduce((a, b) => a + b, 0);
+      const max = Math.max(...counts);
+
+      document.getElementById("stats").hidden = false;
+      document.getElementById("totalVotes").textContent = total;
+      document.getElementById("candidateCount").textContent = names.length;
+      document.getElementById("yourStatus").textContent = voted ? "✅ Voted" : "Not voted";
+
+      const list = document.getElementById("candidates");
+      list.innerHTML = "";
+      list.className = "candidates";
+
+      names.forEach((name, i) => {
+        const count = counts[i];
+        const pct = total ? Math.round((count / total) * 100) : 0;
+        const isLeader = total > 0 && count === max;
+
+        const card = document.createElement("div");
+        card.className = "candidate" + (isLeader ? " leader" : "");
+        card.style.animationDelay = i * 60 + "ms";
+
+        const top = document.createElement("div");
+        top.className = "candidate-top";
+
+        const avatar = document.createElement("div");
+        avatar.className = "avatar";
+        avatar.style.background = AVATAR_COLORS[i % AVATAR_COLORS.length];
+        avatar.textContent = name.charAt(0).toUpperCase();
+
+        const info = document.createElement("div");
+        info.className = "candidate-info";
+        const nameEl = document.createElement("div");
+        nameEl.className = "candidate-name";
+        nameEl.textContent = name;
+        if (isLeader) {
+          const badge = document.createElement("span");
+          badge.className = "badge";
+          badge.textContent = "👑 Leading";
+          nameEl.appendChild(badge);
+        }
+        const votesEl = document.createElement("div");
+        votesEl.className = "candidate-votes";
+        votesEl.textContent = `${count} vote${count === 1 ? "" : "s"} · ${pct}%`;
+        info.append(nameEl, votesEl);
+
+        const btn = document.createElement("button");
+        btn.className = "btn " + (voted ? "btn-ghost voted-btn" : "btn-primary");
+        btn.textContent = voted ? "Voted" : "Vote";
+        btn.disabled = voted;
+        btn.addEventListener("click", () => castVote(name, btn));
+
+        top.append(avatar, info, btn);
+
+        const bar = document.createElement("div");
+        bar.className = "bar";
+        const fill = document.createElement("div");
+        fill.className = "bar-fill";
+        bar.appendChild(fill);
+
+        card.append(top, bar);
+        list.appendChild(card);
+        requestAnimationFrame(() => requestAnimationFrame(() => (fill.style.width = pct + "%")));
+      });
+    }
+
+    async function castVote(name, btn) {
+      const buttons = document.querySelectorAll(".candidate .btn");
+      try {
+        buttons.forEach((b) => (b.disabled = true));
+        btn.innerHTML = '<span class="spinner"></span>';
+        showToast("Confirm the transaction in MetaMask…", "info", true);
+        const tx = await contract.vote(name);
+        showToast("Recording your vote on the blockchain…", "info", true);
+        await tx.wait();
+        showToast(`Vote for ${name} recorded!`, "success");
+        await loadCandidates();
+      } catch (e) {
+        showToast(e.reason || e.shortMessage || e.message, "error");
+        await loadCandidates();
+      }
+    }
+  </script>
+</body>
+</html>
